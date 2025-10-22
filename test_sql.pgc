@@ -1,0 +1,1062 @@
+#include <locale.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdbool.h>
+#include <ecpglib.h>
+#include <ecpgerrno.h>
+#include <sqlca.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+/* Объявление переменных для подключения к БД */
+EXEC SQL BEGIN DECLARE SECTION;
+    char db_name[64]; // имя базы данных
+    char db_user[64];  // имя пользователя базы данных
+    char db_password[64]; // пароль пользователя к базе данных
+    char db_host[64]; // имя хоста (localhost - 127.0.0.1 или students.ami.nstu.ru)
+    char db_port[10]; // номер порта - 5432 по умолчанию
+    char db_schema_name[64]; // имя схемы
+    char search_path_cmd[128]; // имя пути для поиска
+    char connection_string[256];  // строка с connection
+EXEC SQL END DECLARE SECTION;
+
+/* Функция для обработки ошибок
+Параметры:
+@ error - название ошибки (str),
+@ message - строка с ошибкой (str),
+@ fatal - флаг ошибки.
+*/
+void ErrorHandler(const char *error, const char *message, bool fatal) {
+    fprintf(stderr, "Ошибка: %s. %s\n", error ? error : "Unknown error", message ? message : "Unknown message");
+    if (fatal) exit(EXIT_FAILURE);
+}
+
+/* Функция для обрезки пробелов в конце строки */
+void trim_trailing_spaces(char *str) {
+    if (str == NULL) return;
+    int len = strlen(str);
+    while (len > 0 && isspace((unsigned char)str[len - 1])) {
+        str[len - 1] = '\0';
+        len--;
+    }
+}
+
+/* Функция для проверки пустой строки (только пробелы или пустая) */
+int is_empty_string(const char *str, size_t size) {
+    if (str == NULL) return 1;
+    for (size_t i = 0; i < size && str[i] != '\0'; i++) {
+        if (!isspace((unsigned char)str[i])) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Функция для определения кодировки базы данных */
+int detect_and_set_encoding() {
+    EXEC SQL BEGIN DECLARE SECTION;
+        char server_encoding[64];
+        char client_encoding[64];
+    EXEC SQL END DECLARE SECTION;
+
+    /* Получаем кодировку сервера */
+    EXEC SQL SELECT pg_encoding_to_char(encoding)
+             INTO :server_encoding
+             FROM pg_database
+             WHERE datname = current_database();
+
+    if (sqlca.sqlcode < 0) {
+        fprintf(stderr, "Ошибка получения кодировки БД: %s\n", sqlca.sqlerrm.sqlerrmc);
+        return -1;
+    }
+
+    printf("Кодировка базы данных: %s\n", server_encoding);
+
+    /* Определяем подходящую кодировку клиента */
+#ifdef _WIN32
+    /* Windows */
+    if (strcmp(server_encoding, "UTF8") == 0) {
+        /* UTF-8 БД -> используем UTF-8 или WIN1251 */
+        SetConsoleCP(CP_UTF8);
+        SetConsoleOutputCP(CP_UTF8);
+        strcpy(client_encoding, "UTF8");
+        printf("Установлена кодировка консоли: UTF-8\n");
+    } else if (strcmp(server_encoding, "WIN1251") == 0) {
+        /* WIN1251 БД -> используем WIN1251 */
+        SetConsoleCP(1251);
+        SetConsoleOutputCP(1251);
+        strcpy(client_encoding, "WIN1251");
+        printf("Установлена кодировка консоли: CP1251\n");
+    } else if (strcmp(server_encoding, "WIN866") == 0) {
+        /* WIN866 БД -> используем WIN866 */
+        SetConsoleCP(866);
+        SetConsoleOutputCP(866);
+        strcpy(client_encoding, "WIN866");
+        printf("Установлена кодировка консоли: CP866\n");
+    } else {
+        /* Другие кодировки -> пытаемся UTF-8 */
+        SetConsoleCP(CP_UTF8);
+        SetConsoleOutputCP(CP_UTF8);
+        strcpy(client_encoding, "UTF8");
+        printf("Установлена кодировка консоли: UTF-8\n");
+    }
+#else
+    /* Linux/Unix */
+    if (strcmp(server_encoding, "UTF8") == 0) {
+        strcpy(client_encoding, "UTF8");
+        setlocale(LC_ALL, "ru_RU.UTF-8");
+        printf("Установлена локаль: ru_RU.UTF-8\n");
+    } else if (strcmp(server_encoding, "WIN1251") == 0) {
+        strcpy(client_encoding, "WIN1251");
+        setlocale(LC_ALL, "ru_RU.CP1251");
+        printf("Установлена локаль: ru_RU.CP1251\n");
+    } else {
+        /* По умолчанию UTF-8 */
+        strcpy(client_encoding, "UTF8");
+        setlocale(LC_ALL, "ru_RU.UTF-8");
+        printf("Установлена локаль: ru_RU.UTF-8 (по умолчанию)\n");
+    }
+#endif
+
+    /* Устанавливаем кодировку клиента PostgreSQL */
+    EXEC SQL SET CLIENT_ENCODING TO :client_encoding;
+    if (sqlca.sqlcode < 0) {
+        fprintf(stderr, "Ошибка установки кодировки клиента: %s\n", sqlca.sqlerrm.sqlerrmc);
+        return -1;
+    }
+
+    printf("Кодировка клиента PostgreSQL: %s\n", client_encoding);
+    return 0;
+}
+
+/* Прототипы функций */
+/* ---------- Запрос 1 --------------
+1.	Выдать число деталей, которые поставлялись поставщиками,
+имеющими поставки с объёмом от 600 до 700 деталей.
+*/
+void query1(const char *schema_prefix);
+
+/* ---------- Запрос 2 --------------
+2.	Поменять местами цвета самой тяжёлой и самой лёгкой детали,
+т. е. деталям с наибольшим весом установить цвет детали с минимальным весом,
+а деталям с минимальным весом установить цвет детали с наибольшим весом.
+Если цветов несколько, брать первый по алфавиту из этих цветов.
+*/
+void query2(const char *schema_prefix);
+
+/* ---------- Запрос 3 --------------
+3.	Найти поставщиков, имеющих поставки, вес которых составляет менее четверти наибольшего
+веса поставки этого поставщика. Вывести номер поставщика, вес поставки,
+четверть наибольшего веса поставки поставщика.
+*/
+void query3(const char *schema_prefix);
+
+/* ---------- Запрос 4 --------------
+4.	Выбрать изделия, для которых не поставлялось ни одной из деталей,
+поставляемых поставщиком S4.
+*/
+void query4(const char *schema_prefix);
+
+/* ---------- Запрос 5 --------------
+5.	Выдать полную информацию о деталях, которые поставлялись ТОЛЬКО поставщиками,
+имеющими максимальный рейтинг и число поставляемых деталей не менее 3.
+Вывести номер, название, цвет, вес и город детали.
+*/
+void query5(const char *schema_prefix);
+
+int main(void) {
+
+    int encoding_choice = 0;
+    printf("Choose console encoding: 1 - UTF8, 2 - WIN1251: ");
+    while (scanf("%d", &encoding_choice) != 1 || (encoding_choice != 1 && encoding_choice != 2)) {
+        printf("Ошибка. Введите 1 или 2: ");
+        while(getchar() != '\n');
+    }
+
+#ifdef _WIN32
+    if (encoding_choice == 1) system("chcp 65001 >nul");
+    else system("chcp 1251 >nul");
+#endif
+
+    if (encoding_choice == 1) setlocale(LC_ALL, "ru_RU.UTF-8");
+    else setlocale(LC_ALL, "Russian_Russia.1251");
+
+    char db_name_cmd[64], db_user_cmd[64], db_password_cmd[64], db_host_cmd[64], db_port_cmd[10], db_schema_name_cmd[64];
+    printf("Введите название базы данных: ");
+    scanf("%63s", db_name_cmd);
+    printf("\nВведите имя пользователя: ");
+    scanf("%63s", db_user_cmd);
+    printf("\nВведите пароль: ");
+    scanf("%63s", db_password_cmd);
+    printf("\nВведите имя хоста: ");
+    scanf("%63s", db_host_cmd);
+    printf("\nВведите номер порта: ");
+    scanf("%9s", db_port_cmd);
+    printf("\nВведите название схемы: ");
+    scanf("%63s", db_schema_name_cmd);
+
+    // strcpy(db_name, "students_win1251");
+    // strcpy(db_user, "vladimir1");
+    // strcpy(db_password, "FAST1987!");
+    // strcpy(db_host, "127.0.0.1");
+    // strcpy(db_port, "5432");
+
+    // strcpy(db_name, "students");
+    // strcpy(db_user, "pmi-b2702");
+    // strcpy(db_password, "4ioi#ZHzE");
+    // strcpy(db_host, "students.ami.nstu.ru");
+    // strcpy(db_port, "5432");
+
+    strcpy(db_name, db_name_cmd);
+    strcpy(db_user, db_user_cmd);
+    strcpy(db_password, db_password_cmd);
+    strcpy(db_host, db_host_cmd);
+    strcpy(db_port, db_port_cmd);
+    strcpy(db_schema_name, db_schema_name_cmd);
+
+    char schema_prefix[70];
+    if (strlen(db_schema_name) > 0 && strcmp(db_schema_name, "-") != 0) {
+        snprintf(schema_prefix, sizeof(schema_prefix), "%s", db_schema_name);
+    } else {
+        strcpy(schema_prefix, "");
+    }
+
+    snprintf(connection_string, sizeof(connection_string), "%s@%s:%s", db_name, db_host, db_port);
+
+    printf("Подключение к базе данных %s...\n", connection_string);
+
+    EXEC SQL CONNECT TO :connection_string USER :db_user USING :db_password;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка подключения к базе данных", true);
+    }
+    printf("Подключение успешно.\n\n");
+
+    /* Автоматическое определение и установка кодировки */
+    if (detect_and_set_encoding() < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка настройки кодировки", false);
+        EXEC SQL DISCONNECT;
+        exit(EXIT_FAILURE);
+    }
+
+    printf("\nПодключение к базе данных успешно выполнено.\n");
+    printf("Кодировка настроена автоматически.\n\n");
+
+    if (strlen(db_schema_name) > 0 && strcmp(db_schema_name, "-") != 0) {
+        snprintf(search_path_cmd, sizeof(search_path_cmd),
+                "SET search_path TO %s, public", db_schema_name);
+    } else {
+        strcpy(search_path_cmd, "SET search_path TO public");
+    }
+
+    printf("Настройка search_path: %s\n", search_path_cmd);
+
+    EXEC SQL EXECUTE IMMEDIATE :search_path_cmd;
+    if (sqlca.sqlcode < 0)
+        fprintf(stderr, "⚠ Не удалось установить search_path: %s\n", sqlca.sqlerrm.sqlerrmc);
+    else
+        printf("search_path установлен: %s\n", search_path_cmd);
+
+    int choice;
+    do {
+        /* Меню */
+        printf("Лабораторная работа 3: Вариант 4 - Ямщиков Владимир и Минвалиева Тамила\n");
+        printf("\nВыберите запрос для выполнения:\n");
+        printf("1. Выдать число деталей, которые поставлялись поставщиками, имеющими поставки с объёмом от 600 до 700 деталей.\n");
+        printf("2. Поменять местами цвета самой тяжёлой и самой лёгкой детали, т. е. деталям с наибольшим весом установить цвет детали с минимальным весом, а деталям с минимальным весом установить цвет детали с наибольшим весом. Если цветов несколько, брать первый по алфавиту из этих цветов.\n");
+        printf("3. Найти поставщиков, имеющих поставки, вес которых составляет менее четверти наибольшего веса поставки этого поставщика. Вывести номер поставщика, вес поставки, четверть наибольшего веса поставки поставщика.\n");
+        printf("4. Выбрать изделия, для которых не поставлялось ни одной из дета лей, поставляемых поставщиком S4.\n");
+        printf("5. Выдать полную информацию о деталях, которые поставлялись ТОЛЬКО поставщиками, имеющи-ми максимальный рейтинг и число поставляемых деталей не менее 3. Вывести номер, название, цвет, вес и город детали.\n");
+        printf("0. Выход.\n");
+        printf("Введите ваш выбор (0-5): ");
+        int var;
+        char term;
+        int valid_input = 0;
+        while (!valid_input) {
+            var = scanf("%d%c", &choice, &term);
+            if (var != 2 || term != '\n') {
+                printf("Ошибка: введите целое число от 0 до 5: ");
+                while (getchar() != '\n');
+            } else if (choice < 0 || choice > 5) {
+                printf("Ошибка: число должно быть от 0 до 5. Попробуйте снова: ");
+            } else {
+                valid_input = 1;
+            }
+        }
+
+        switch (choice) {
+            case 1:
+                query1(schema_prefix);
+                break;
+            case 2:
+                query2(schema_prefix);
+                break;
+            case 3:
+                query3(schema_prefix);
+                break;
+            case 4:
+                query4(schema_prefix);
+                break;
+            case 5:
+                query5(schema_prefix);
+                break;
+            case 0:
+                printf("Завершение программы...\n");
+                break;
+            default:
+                printf("Неверный выбор. Пожалуйста, попробуйте снова.\n");
+                break;
+        }
+    } while (choice != 0);
+
+    /* Отключение от базы данных */
+    printf("Отключение от базы данных...\n");
+    EXEC SQL DISCONNECT;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка отключения от базы данных", true);
+    }
+    printf("Отключение от базы данных прошло успешно.\n");
+
+    return EXIT_SUCCESS;
+}
+
+/* ---------- Запрос 1 --------------
+1.	Выдать число деталей, которые поставлялись поставщиками,
+имеющими поставки с объёмом от 600 до 700 деталей.
+*/
+void query1(const char *schema_prefix) {
+    /* Объявление переменных */
+    EXEC SQL BEGIN DECLARE SECTION;
+        int detail_count = 0;
+    EXEC SQL END DECLARE SECTION;
+
+    /* Начало транзакции */
+    printf("Начало транзакции...\n");
+    EXEC SQL BEGIN WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    if (strlen(schema_prefix) > 0) {
+        EXEC SQL BEGIN DECLARE SECTION;
+            char schema_cmd[128];
+        EXEC SQL END DECLARE SECTION;
+        snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
+        EXEC SQL EXECUTE IMMEDIATE :schema_cmd;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+        printf("search_path установлен: %s\n\n", schema_prefix);
+    }
+    printf("Транзакция начата\n\n");
+
+    /* Выполнение запроса */
+    printf("Выполнение запроса...\n");
+    printf("1. Выдать число деталей, которые поставлялись поставщиками, имеющими поставки с объёмом от 600 до 700 деталей.\n");
+    EXEC SQL
+    SELECT COUNT(DISTINCT spj.n_det)
+    INTO :detail_count
+    FROM spj
+    WHERE spj.kol BETWEEN 600 AND 700;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка выполнения запроса", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    printf("Количество деталей: %d\n", detail_count);
+    printf("\nЗапрос успешно выполнен\n\n");
+
+    /* Завершение транзакции */
+    printf("Завершение транзакции...\n");
+    EXEC SQL COMMIT WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    printf("Транзакция завершена успешно.\n");
+}
+
+/* ---------- Запрос 2 --------------
+2.	Поменять местами цвета самой тяжёлой и самой лёгкой детали,
+т. е. деталям с наибольшим весом установить цвет детали с минимальным весом,
+а деталям с минимальным весом установить цвет детали с наибольшим весом.
+Если цветов несколько, брать первый по алфавиту из этих цветов.
+*/
+void query2(const char *schema_prefix) {
+    /* Начало транзакции */
+    printf("Начало транзакции...\n");
+    EXEC SQL BEGIN WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    if (strlen(schema_prefix) > 0) {
+        EXEC SQL BEGIN DECLARE SECTION;
+            char schema_cmd[128];
+        EXEC SQL END DECLARE SECTION;
+        snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
+        EXEC SQL EXECUTE IMMEDIATE :schema_cmd;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+        printf("search_path установлен: %s\n\n", schema_prefix);
+    }
+    printf("Транзакция начата\n\n");
+
+    /* Выполнение UPDATE запроса для обмена весов деталей */
+    printf("Выполнение запроса...\n");
+    printf("2.	Поменять местами цвета самой тяжёлой и самой лёгкой детали, т. е. деталям с наибольшим весом установить цвет детали с минимальным весом, а деталям с минимальным весом установить цвет детали с наибольшим весом. Если цветов несколько, брать первый по алфавиту из этих цветов.\n");
+    EXEC SQL
+    UPDATE p
+    SET cvet = CASE
+    WHEN p.ves = (SELECT MAX(ves)
+                  FROM p p5)
+    THEN (SELECT p3.cvet cvet1
+          FROM p p3
+          ORDER BY p3.ves, p3.cvet
+          LIMIT 1)
+    ELSE (SELECT p4.cvet cvet2
+          FROM p p4
+          ORDER BY p4.ves desc, p4.cvet
+          LIMIT 1)
+    END
+    WHERE p.ves=(SELECT MIN(ves)
+                 FROM p p1)
+    OR
+    p.ves=(SELECT MAX(ves)
+           FROM p p2);
+    if (sqlca.sqlcode == 0) {
+        printf("Вес деталей успешно обновлён.\n");
+        printf("Количество обновлённых строк: %ld\n", sqlca.sqlerrd[2]);
+        printf("\nЗапрос успешно выполнен\n\n");
+    } else {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при обновлении весов", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+
+    /* Завершение транзакции */
+    printf("Завершение транзакции...\n");
+    EXEC SQL COMMIT WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    printf("Транзакция завершена успешно.\n");
+}
+
+/* ---------- Запрос 3 --------------
+3.	Найти поставщиков, имеющих поставки, вес которых составляет менее четверти наибольшего
+веса поставки этого поставщика. Вывести номер поставщика, вес поставки,
+четверть наибольшего веса поставки поставщика.
+*/
+void query3(const char *schema_prefix) {
+    /* Объявление переменных */
+    EXEC SQL BEGIN DECLARE SECTION;
+        char n_post[7];
+        int kol;
+        float quarter;
+        short n_post_ind = 0, kol_ind = 0, quarter_ind = 0;
+    EXEC SQL END DECLARE SECTION;
+
+    char n_post_display[25];
+    char kol_display[25];
+
+    /* Начало транзакции */
+    printf("Начало транзакции...\n");
+    EXEC SQL BEGIN WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    if (strlen(schema_prefix) > 0) {
+        EXEC SQL BEGIN DECLARE SECTION;
+            char schema_cmd[128];
+        EXEC SQL END DECLARE SECTION;
+        snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
+        EXEC SQL EXECUTE IMMEDIATE :schema_cmd;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+        printf("search_path установлен: %s\n\n", schema_prefix);
+    }
+    printf("Транзакция начата\n\n");
+
+    /* Открытие курсора */
+    printf("Открытие курсора...\n");
+    printf("Выполнение запроса...\n");
+    printf("3.	Найти поставщиков, имеющих поставки, вес которых составляет менее четверти наибольшего веса поставки этого поставщика. Вывести номер поставщика, вес поставки, четверть наибольшего веса поставки поставщика.\n");
+    EXEC SQL DECLARE parts_cursor1 CURSOR FOR
+    SELECT DISTINCT spj.n_post, spj.kol, max_kol.quarter AS quarter_max
+    FROM spj
+    LEFT JOIN (
+        SELECT n_post, MAX(kol) / 4.0 AS quarter
+        FROM spj
+        GROUP BY n_post
+    ) max_kol ON spj.n_post = max_kol.n_post
+    WHERE spj.kol < max_kol.quarter
+    ORDER BY spj.n_post, spj.kol ASC;
+    /* Проверка успешности определения курсора */
+    if (sqlca.sqlcode < 0){
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось определить курсор", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+
+    printf("Курсор определен\n\n");
+
+    EXEC SQL OPEN parts_cursor1;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка открытия курсора", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+    printf("Курсор открыт\n\n");
+
+    /* Вывод результатов */
+    printf("Результат запроса:\n\n");
+    printf("\nПоставщики с поставками, вес которых составляет менее четверти наибольшего веса поставки этого поставщика:\n");
+
+    /* Первый FETCH для проверки наличия данных */
+    EXEC SQL FETCH parts_cursor1 INTO :n_post:n_post_ind, :kol:kol_ind, :quarter:quarter_ind;
+    if (sqlca.sqlcode == 100) {
+        printf("Данных не найдено.\n");
+    } else if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
+        printf("Закрытие курсора...\n");
+        EXEC SQL CLOSE parts_cursor1;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
+        } else {
+            printf("Курсор закрыт\n");
+        }
+        printf("Транзакция отменена\n\n");
+        EXEC SQL ROLLBACK WORK;
+        return;
+    } else {
+        /* Есть данные - выводим заголовок и первую строку */
+        printf("--------------------------------------------------------------------------\n");
+        printf("%-9s | %-10s | %-25s\n", "Поставщик", "Вес", "Четверть макс. веса");
+        printf("--------------------------------------------------------------------------\n");
+        if (n_post_ind < 0 || is_empty_string(n_post, sizeof(n_post)))
+            strcpy(n_post_display, "Отсутствует");
+        else
+            strncpy(n_post_display, n_post, sizeof(n_post_display)-1);
+            n_post_display[sizeof(n_post_display)-1] = '\0';
+            trim_trailing_spaces(n_post_display);
+
+        if (kol_ind < 0)
+            strcpy(kol_display, "Отсутствует");
+        else
+            snprintf(kol_display, sizeof(kol_display), "%d", kol);
+        printf("%-9s | %-8s | %-20.2f\n", n_post_display, kol_display, quarter);
+    }
+
+    /* Цикл для остальных строк */
+    while (1) {
+        /* Очистка переменных перед каждым FETCH */
+        memset(n_post, 0, sizeof(n_post));
+        kol = 0;
+        quarter = 0.0;
+        n_post_ind = kol_ind = quarter_ind = 0;
+
+        EXEC SQL FETCH parts_cursor1 INTO :n_post:n_post_ind, :kol:kol_ind, :quarter:quarter_ind;
+        if (sqlca.sqlcode == 100) {
+            break;
+        } else if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
+            EXEC SQL CLOSE parts_cursor1;
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+        if (n_post_ind < 0 || is_empty_string(n_post, sizeof(n_post)))
+            strcpy(n_post_display, "Отсутствует");
+        else
+            strncpy(n_post_display, n_post, sizeof(n_post_display)-1);
+            n_post_display[sizeof(n_post_display)-1] = '\0';
+            trim_trailing_spaces(n_post_display);
+
+        if (kol_ind < 0)
+            strcpy(kol_display, "Отсутствует");
+        else
+            snprintf(kol_display, sizeof(kol_display), "%d", kol);
+        printf("%-9s | %-8s | %-20.2f\n", n_post_display, kol_display, quarter);
+    }
+
+    printf("\nЗапрос успешно выполнен\n\n");
+
+    /* Закрытие курсора */
+    printf("Закрытие курсора...\n");
+    EXEC SQL CLOSE parts_cursor1;
+    /* Проверка, успешно ли закрылся курсор */
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+    printf("Курсор закрыт\n\n");
+
+    /* Завершение транзакции */
+    printf("Завершение транзакции...\n");
+    EXEC SQL COMMIT WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    printf("Транзакция завершена успешно.\n");
+}
+
+/* ---------- Запрос 4 --------------
+4.	Выбрать изделия, для которых не поставлялось ни одной из деталей,
+поставляемых поставщиком S4.
+*/
+void query4(const char *schema_prefix) {
+    /* Объявление переменных */
+    EXEC SQL BEGIN DECLARE SECTION;
+        char n_izd[7];
+        char name[21];
+        char town[21];
+        short n_izd_ind = 0, name_ind = 0, town_ind = 0;
+    EXEC SQL END DECLARE SECTION;
+
+    /* Вспомогательные буферы для безопасной обработки NULL */
+    char n_izd_display[25];
+    char name_display[25];
+    char town_display[25];
+
+    /* Начало транзакции */
+    printf("Начало транзакции...\n");
+    EXEC SQL BEGIN WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        return;
+    }
+    if (strlen(schema_prefix) > 0) {
+        EXEC SQL BEGIN DECLARE SECTION;
+            char schema_cmd[128];
+        EXEC SQL END DECLARE SECTION;
+        snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
+        EXEC SQL EXECUTE IMMEDIATE :schema_cmd;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+        printf("search_path установлен: %s\n\n", schema_prefix);
+    }
+    printf("Транзакция начата\n\n");
+
+    /* Открытие курсора */
+    printf("Открытие курсора...\n");
+    printf("Выполнение запроса...\n");
+    printf("4.	Выбрать изделия, для которых не поставлялось ни одной из дета лей, поставляемых поставщиком S4.\n");
+    EXEC SQL DECLARE supplier_cursor CURSOR FOR
+    SELECT j.n_izd, j.name, j.town
+    FROM j
+    EXCEPT
+    SELECT j1.n_izd, j1.name, j1.town
+    FROM spj t
+    JOIN j j1 ON j1.n_izd = t.n_izd
+    WHERE t.n_det in (
+        SELECT n_det
+        FROM spj a
+        WHERE a.n_post = 'S4'
+    )
+    ORDER BY n_izd ASC;
+    /* Проверка успешности определения курсора */
+    if (sqlca.sqlcode < 0){
+       ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось определить курсор", false);
+       EXEC SQL ROLLBACK WORK;
+       printf("Транзакция отменена\n\n");
+       return;
+    }
+
+    printf("Курсор определен.\n\n");
+
+    /* Открытие курсора */
+    printf("Открытие курсора...\n");
+    EXEC SQL OPEN supplier_cursor;
+    /* Проверка успешности открытия курсора */
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка открытия курсора", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+    printf("Курсор открыт\n\n");
+
+    /* Вывод результатов */
+    printf("Результат запроса:\n\n");
+    printf("\nПоставщики, не поставлявшие детали для изделий из Парижа:\n");
+    EXEC SQL FETCH supplier_cursor INTO :n_izd:n_izd_ind, :name:name_ind, :town:town_ind;
+    if (sqlca.sqlcode == 100) {
+        printf("Данных не найдено.\n");
+    } else if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
+        printf("Закрытие курсора...\n");
+        EXEC SQL CLOSE supplier_cursor;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
+        }
+        else {
+            printf("Курсор закрыт\n");
+        }
+        printf("Транзакция отменена\n\n");
+        EXEC SQL ROLLBACK WORK;
+        return;
+    } else {
+        printf("--------------------------------------------------------------------------\n");
+        printf("%-7s | %-20s | %-20s\n", "n_izd", "Название", "Город");
+        printf("--------------------------------------------------------------------------\n");
+        /* Безопасная обработка NULL-значений */
+        if (n_izd_ind < 0 || is_empty_string(n_izd, sizeof(n_izd)))
+            strcpy(n_izd_display, "Отсутствует");
+        else
+            strncpy(n_izd_display, n_izd, sizeof(n_izd_display)-1);
+            n_izd_display[sizeof(n_izd_display)-1] = '\0';
+            trim_trailing_spaces(n_izd_display);
+
+
+        if (town_ind < 0 || is_empty_string(town, sizeof(town)))
+            strcpy(town_display, "Отсутствует");
+        else
+            strncpy(town_display, town, sizeof(town_display)-1);
+            town_display[sizeof(town_display)-1] = '\0';
+            trim_trailing_spaces(town_display);
+        printf("%-7s | %-20s | %-20s\n", n_izd_display,
+           name,
+           town_display);
+    }
+    while (1) {
+        EXEC SQL FETCH supplier_cursor INTO :n_izd:n_izd_ind, :name:name_ind, :town:town_ind;
+        if (sqlca.sqlcode == 100) {
+            break;
+        } else if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
+            EXEC SQL CLOSE supplier_cursor;
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+        /* Безопасная обработка NULL-значений */
+        if (n_izd_ind < 0 || is_empty_string(n_izd, sizeof(n_izd)))
+            strcpy(n_izd_display, "Отсутствует");
+        else
+            strncpy(n_izd_display, n_izd, sizeof(n_izd_display)-1);
+            n_izd_display[sizeof(n_izd_display)-1] = '\0';
+            trim_trailing_spaces(n_izd_display);
+
+        if (name_ind < 0 || is_empty_string(name, sizeof(name)))
+            strcpy(name_display, "Отсутствует");
+        else
+            strncpy(name_display, name, sizeof(name_display)-1);
+            name_display[sizeof(name_display)-1] = '\0';
+            trim_trailing_spaces(name_display);
+
+        if (town_ind < 0 || is_empty_string(town, sizeof(town)))
+            strcpy(town_display, "Отсутствует");
+        else
+            strncpy(town_display, town, sizeof(town_display)-1);
+            town_display[sizeof(town_display)-1] = '\0';
+            trim_trailing_spaces(town_display);
+        printf("%-7s | %-20s | %-20s\n", n_izd_display,
+           name_display,
+           town_display);
+    }
+    printf("\nЗапрос успешно выполнен\n\n");
+
+    /* Закрытие курсора */
+    printf("Закрытие курсора...\n");
+    EXEC SQL CLOSE supplier_cursor;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка закрытия курсора", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+
+    printf("Курсор закрыт\n\n");
+
+    /* Завершение транзакции */
+    printf("Завершение транзакции...\n");
+    EXEC SQL COMMIT WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+    printf("Транзакция завершена успешно.\n");
+}
+
+/* ---------- Запрос 5 --------------
+5.	Выдать полную информацию о деталях, которые поставлялись ТОЛЬКО поставщиками,
+имеющими максимальный рейтинг и число поставляемых деталей не менее 3.
+Вывести номер, название, цвет, вес и город детали.
+*/
+/* ---------- Запрос 5 --------------
+5.	Выдать полную информацию о деталях, которые поставлялись ТОЛЬКО поставщиками,
+имеющими максимальный рейтинг и число поставляемых деталей не менее 3.
+Вывести номер, название, цвет, вес и город детали.
+*/
+void query5(const char *schema_prefix) {
+    /* Объявление переменных */
+    EXEC SQL BEGIN DECLARE SECTION;
+        char n_det[7];
+        char name[21];
+        char cvet[21];
+        int ves;
+        char town[21];
+        short n_det_ind = 0, name_ind = 0, cvet_ind = 0, ves_ind = 0, town_ind = 0;
+    EXEC SQL END DECLARE SECTION;
+
+    /* Вспомогательные буферы для безопасной обработки NULL */
+    char n_det_display[25];
+    char name_display[25];
+    char cvet_display[25];
+    char ves_display[25];
+    char town_display[25];
+
+    /* Начало транзакции */
+    printf("Начало транзакции...\n");
+    EXEC SQL BEGIN WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+    if (strlen(schema_prefix) > 0) {
+        EXEC SQL BEGIN DECLARE SECTION;
+            char schema_cmd[128];
+        EXEC SQL END DECLARE SECTION;
+        snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
+        EXEC SQL EXECUTE IMMEDIATE :schema_cmd;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+        printf("search_path установлен: %s\n\n", schema_prefix);
+    }
+    printf("Транзакция начата\n\n");
+
+    /* Открытие курсора */
+    printf("Открытие курсора...\n");
+    printf("Выполнение запроса...\n");
+    printf("5. Выдать полную информацию о деталях, которые поставлялись ТОЛЬКО поставщиками, имеющими максимальный рейтинг и число поставляемых деталей не менее 3. Вывести номер, название, цвет, вес и город детали.\n");
+
+    EXEC SQL DECLARE parts_cursor2 CURSOR FOR
+    SELECT p.n_det, p.name, p.cvet, p.ves, p.town
+    FROM p
+    WHERE p.n_det IN (
+        SELECT DISTINCT spj.n_det
+        FROM spj
+        WHERE spj.n_post IN (
+            SELECT n_post
+            FROM s
+            WHERE reiting = (SELECT MAX(reiting) FROM s)
+            INTERSECT
+            SELECT n_post
+            FROM spj
+            GROUP BY n_post
+            HAVING COUNT(DISTINCT n_det) >= 3
+        )
+        EXCEPT
+        SELECT DISTINCT spj.n_det
+        FROM spj
+        WHERE spj.n_post NOT IN (
+            SELECT n_post
+            FROM s
+            WHERE reiting = (SELECT MAX(reiting) FROM s)
+        )
+    )
+    ORDER BY p.n_det ASC;
+
+    /* Проверка успешности определения курсора */
+    if (sqlca.sqlcode < 0){
+       ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось определить курсор", false);
+       EXEC SQL ROLLBACK WORK;
+       printf("Транзакция отменена\n\n");
+       return;
+    }
+
+    printf("Курсор определен\n\n");
+
+    /* Открытие курсора */
+    printf("Открытие курсора...\n");
+    EXEC SQL OPEN parts_cursor2;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка открытия курсора", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+
+    printf("Курсор открыт\n\n");
+
+    /* Вывод результатов */
+    printf("Результат запроса:\n\n");
+    printf("\nИнформация о деталях, которые поставлялись ТОЛЬКО поставщиками, имеющими максимальный рейтинг и число поставляемых деталей не менее 3:\n");
+
+    EXEC SQL FETCH parts_cursor2 INTO :n_det:n_det_ind, :name:name_ind, :cvet:cvet_ind, :ves:ves_ind, :town:town_ind;
+    if (sqlca.sqlcode == 100) {
+        printf("Данных не найдено.\n");
+    } else if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
+        printf("Закрытие курсора...\n");
+        EXEC SQL CLOSE parts_cursor2;
+        if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
+        }
+        else {
+            printf("Курсор закрыт\n");
+        }
+        printf("Транзакция отменена\n\n");
+        EXEC SQL ROLLBACK WORK;
+        return;
+    } else {
+        printf("------------------------------------------------------------\n");
+        printf("%-7s | %-20s | %-20s | %-5s | %-20s\n", "n_det", "Название", "Цвет", "Вес", "Город");
+        printf("------------------------------------------------------------\n");
+
+        /* Безопасная обработка NULL-значений */
+        if (n_det_ind < 0 || is_empty_string(n_det, sizeof(n_det)))
+            strcpy(n_det_display, "Отсутствует");
+        else
+            strncpy(n_det_display, n_det, sizeof(n_det_display)-1);
+            n_det_display[sizeof(n_det_display)-1] = '\0';
+            trim_trailing_spaces(n_det_display);
+
+        if (name_ind < 0 || is_empty_string(name, sizeof(name)))
+            strcpy(name_display, "Отсутствует");
+        else
+            strncpy(name_display, name, sizeof(name_display)-1);
+            name_display[sizeof(name_display)-1] = '\0';
+            trim_trailing_spaces(name_display);
+
+        if (cvet_ind < 0 || is_empty_string(cvet, sizeof(cvet)))
+            strcpy(cvet_display, "Отсутствует");
+        else
+            strncpy(cvet_display, cvet, sizeof(cvet_display)-1);
+            cvet_display[sizeof(cvet_display)-1] = '\0';
+            trim_trailing_spaces(cvet_display);
+
+        if (ves_ind < 0)
+            strcpy(ves_display, "Отсутствует");
+        else
+            snprintf(ves_display, sizeof(ves_display), "%d", ves);
+
+        if (town_ind < 0 || is_empty_string(town, sizeof(town)))
+            strcpy(town_display, "Отсутствует");
+        else
+            strncpy(town_display, town, sizeof(town_display)-1);
+            town_display[sizeof(town_display)-1] = '\0';
+            trim_trailing_spaces(town_display);
+
+        printf("%-7s | %-20s | %-15s | %-5s | %-20s\n",
+               n_det_display, name_display, cvet_display, ves_display, town_display);
+    }
+
+    while (1) {
+        /* Очистка буферов перед каждым FETCH */
+        memset(n_det, 0, sizeof(n_det));
+        memset(name, 0, sizeof(name));
+        memset(cvet, 0, sizeof(cvet));
+        memset(town, 0, sizeof(town));
+        ves = 0;
+        n_det_ind = name_ind = cvet_ind = ves_ind = town_ind = 0;
+
+        EXEC SQL FETCH parts_cursor2 INTO :n_det:n_det_ind, :name:name_ind, :cvet:cvet_ind, :ves:ves_ind, :town:town_ind;
+        if (sqlca.sqlcode == 100) {
+            break;
+        } else if (sqlca.sqlcode < 0) {
+            ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
+            EXEC SQL CLOSE parts_cursor2;
+            EXEC SQL ROLLBACK WORK;
+            return;
+        }
+
+        /* Безопасная обработка NULL-значений для каждой строки */
+        if (n_det_ind < 0 || is_empty_string(n_det, sizeof(n_det)))
+            strcpy(n_det_display, "Отсутствует");
+        else {
+            strncpy(n_det_display, n_det, sizeof(n_det_display)-1);
+            n_det_display[sizeof(n_det_display)-1] = '\0';
+            trim_trailing_spaces(n_det_display);
+        }
+
+        if (name_ind < 0 || is_empty_string(name, sizeof(name)))
+            strcpy(name_display, "Отсутствует");
+        else {
+            strncpy(name_display, name, sizeof(name_display)-1);
+            name_display[sizeof(name_display)-1] = '\0';
+            trim_trailing_spaces(name_display);
+        }
+
+        if (cvet_ind < 0 || is_empty_string(cvet, sizeof(cvet)))
+            strcpy(cvet_display, "Отсутствует");
+        else {
+            strncpy(cvet_display, cvet, sizeof(cvet_display)-1);
+            cvet_display[sizeof(cvet_display)-1] = '\0';
+            trim_trailing_spaces(cvet_display);
+        }
+
+        if (ves_ind < 0)
+            strcpy(ves_display, "Отсутствует");
+        else
+            snprintf(ves_display, sizeof(ves_display), "%d", ves);
+
+        if (town_ind < 0 || is_empty_string(town, sizeof(town)))
+            strcpy(town_display, "Отсутствует");
+        else {
+            strncpy(town_display, town, sizeof(town_display)-1);
+            town_display[sizeof(town_display)-1] = '\0';
+            trim_trailing_spaces(town_display);
+        }
+
+        printf("%-7s | %-20s | %-15s | %-5s | %-20s\n",
+               n_det_display, name_display, cvet_display, ves_display, town_display);
+    }
+
+    printf("\nЗапрос успешно выполнен\n\n");
+
+    /* Закрытие курсора */
+    printf("Закрытие курсора...\n");
+    EXEC SQL CLOSE parts_cursor2;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка закрытия курсора", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+
+    /* Завершение транзакции */
+    EXEC SQL COMMIT WORK;
+    if (sqlca.sqlcode < 0) {
+        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
+        EXEC SQL ROLLBACK WORK;
+        printf("Транзакция отменена\n\n");
+        return;
+    }
+    printf("Транзакция завершена успешно.\n");
+}
