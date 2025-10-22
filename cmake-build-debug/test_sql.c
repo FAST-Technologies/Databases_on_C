@@ -246,17 +246,21 @@ int main(void) {
     printf("\nВведите название схемы: ");
     scanf("%63s", db_schema_name_cmd);
 
+    /* Пример при использовании локальной БД*/
     // strcpy(db_name, "students_win1251");
     // strcpy(db_user, "vladimir1");
     // strcpy(db_password, "FAST1987!");
     // strcpy(db_host, "127.0.0.1");
     // strcpy(db_port, "5432");
+    // strcpy(db_schema_name, "-");
 
+    /* Пример при использовании серверной БД*/
     // strcpy(db_name, "students");
     // strcpy(db_user, "pmi-b2702");
     // strcpy(db_password, "4ioi#ZHzE");
     // strcpy(db_host, "students.ami.nstu.ru");
     // strcpy(db_port, "5432");
+    // strcpy(db_schema_name, "pmib2702");
 
     strcpy(db_name, db_name_cmd);
     strcpy(db_user, db_user_cmd);
@@ -277,7 +281,7 @@ int main(void) {
     printf("Подключение к базе данных %s...\n", connection_string);
 
     { ECPGconnect(__LINE__, 0, connection_string , db_user , db_password , NULL, 0); }
-#line 232 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 236 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка подключения к базе данных", true);
@@ -288,7 +292,7 @@ int main(void) {
     if (detect_and_set_encoding() < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка настройки кодировки", false);
         { ECPGdisconnect(__LINE__, "CURRENT");}
-#line 241 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 245 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         exit(EXIT_FAILURE);
     }
@@ -306,7 +310,7 @@ int main(void) {
     printf("Настройка search_path: %s\n", search_path_cmd);
 
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_exec_immediate, search_path_cmd, ECPGt_EOIT, ECPGt_EORT);}
-#line 257 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 261 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0)
         fprintf(stderr, "⚠ Не удалось установить search_path: %s\n", sqlca.sqlerrm.sqlerrmc);
@@ -368,7 +372,7 @@ int main(void) {
     /* Отключение от базы данных */
     printf("Отключение от базы данных...\n");
     { ECPGdisconnect(__LINE__, "CURRENT");}
-#line 317 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 321 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка отключения от базы данных", true);
@@ -387,21 +391,21 @@ void query1(const char *schema_prefix) {
     /* exec sql begin declare section */
            
     
-#line 333 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 337 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  int detail_count = 0 ;
 /* exec sql end declare section */
-#line 334 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 338 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
 
     /* Начало транзакции */
     printf("Начало транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "begin work");}
-#line 338 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 342 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 341 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 345 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -409,19 +413,19 @@ void query1(const char *schema_prefix) {
         /* exec sql begin declare section */
              
         
-#line 346 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 350 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char schema_cmd [ 128 ] ;
 /* exec sql end declare section */
-#line 347 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 351 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_exec_immediate, schema_cmd, ECPGt_EOIT, ECPGt_EORT);}
-#line 349 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 353 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 352 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 356 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -435,12 +439,12 @@ void query1(const char *schema_prefix) {
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "select count ( distinct spj . n_det ) from spj where spj . kol between 600 and 700", ECPGt_EOIT, 
 	ECPGt_int,&(detail_count),(long)1,(long)1,sizeof(int), 
 	ECPGt_NO_INDICATOR, NULL , 0L, 0L, 0L, ECPGt_EORT);}
-#line 366 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 370 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка выполнения запроса", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 369 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 373 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -450,12 +454,12 @@ void query1(const char *schema_prefix) {
     /* Завершение транзакции */
     printf("Завершение транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "commit work");}
-#line 377 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 381 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 380 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 384 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -472,12 +476,12 @@ void query2(const char *schema_prefix) {
     /* Начало транзакции */
     printf("Начало транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "begin work");}
-#line 395 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 399 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 398 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 402 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -485,19 +489,19 @@ void query2(const char *schema_prefix) {
         /* exec sql begin declare section */
              
         
-#line 403 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 407 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char schema_cmd [ 128 ] ;
 /* exec sql end declare section */
-#line 404 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 408 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_exec_immediate, schema_cmd, ECPGt_EOIT, ECPGt_EORT);}
-#line 406 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 410 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 409 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 413 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -509,7 +513,7 @@ void query2(const char *schema_prefix) {
     printf("Выполнение запроса...\n");
     printf("2.	Поменять местами цвета самой тяжёлой и самой лёгкой детали, т. е. деталям с наибольшим весом установить цвет детали с минимальным весом, а деталям с минимальным весом установить цвет детали с наибольшим весом. Если цветов несколько, брать первый по алфавиту из этих цветов.\n");
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "update p set cvet = case when p . ves = ( select MAX ( ves ) from p p5 ) then ( select p3 . cvet cvet1 from p p3 order by p3 . ves , p3 . cvet limit 1 ) else ( select p4 . cvet cvet2 from p p4 order by p4 . ves desc , p4 . cvet limit 1 ) end where p . ves = ( select MIN ( ves ) from p p1 ) or p . ves = ( select MAX ( ves ) from p p2 )", ECPGt_EOIT, ECPGt_EORT);}
-#line 437 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 441 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode == 0) {
         printf("Вес деталей успешно обновлён.\n");
@@ -518,7 +522,7 @@ void query2(const char *schema_prefix) {
     } else {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при обновлении весов", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 444 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 448 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -527,12 +531,12 @@ void query2(const char *schema_prefix) {
     /* Завершение транзакции */
     printf("Завершение транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "commit work");}
-#line 451 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 455 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 454 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 458 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -552,19 +556,19 @@ void query3(const char *schema_prefix) {
          
                  
     
-#line 468 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 472 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char n_post [ 7 ] ;
  
-#line 469 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 473 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  int kol ;
  
-#line 470 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 474 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  float quarter ;
  
-#line 471 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 475 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  short n_post_ind = 0 , kol_ind = 0 , quarter_ind = 0 ;
 /* exec sql end declare section */
-#line 472 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 476 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
 
     char n_post_display[25];
@@ -573,12 +577,12 @@ void query3(const char *schema_prefix) {
     /* Начало транзакции */
     printf("Начало транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "begin work");}
-#line 479 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 483 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 482 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 486 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -586,19 +590,19 @@ void query3(const char *schema_prefix) {
         /* exec sql begin declare section */
              
         
-#line 487 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 491 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char schema_cmd [ 128 ] ;
 /* exec sql end declare section */
-#line 488 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 492 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_exec_immediate, schema_cmd, ECPGt_EOIT, ECPGt_EORT);}
-#line 490 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 494 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 493 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 497 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -611,13 +615,13 @@ void query3(const char *schema_prefix) {
     printf("Выполнение запроса...\n");
     printf("3.	Найти поставщиков, имеющих поставки, вес которых составляет менее четверти наибольшего веса поставки этого поставщика. Вывести номер поставщика, вес поставки, четверть наибольшего веса поставки поставщика.\n");
     /* declare parts_cursor1 cursor for select distinct spj . n_post , spj . kol , max_kol . quarter as quarter_max from spj left join ( select n_post , MAX ( kol ) / 4.0 as quarter from spj group by n_post ) max_kol on spj . n_post = max_kol . n_post where spj . kol < max_kol . quarter order by spj . n_post , spj . kol asc */
-#line 513 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 517 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     /* Проверка успешности определения курсора */
     if (sqlca.sqlcode < 0){
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось определить курсор", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 517 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 521 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -626,12 +630,12 @@ void query3(const char *schema_prefix) {
     printf("Курсор определен\n\n");
 
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "declare parts_cursor1 cursor for select distinct spj . n_post , spj . kol , max_kol . quarter as quarter_max from spj left join ( select n_post , MAX ( kol ) / 4.0 as quarter from spj group by n_post ) max_kol on spj . n_post = max_kol . n_post where spj . kol < max_kol . quarter order by spj . n_post , spj . kol asc", ECPGt_EOIT, ECPGt_EORT);}
-#line 524 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 528 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка открытия курсора", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 527 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 531 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -650,7 +654,7 @@ void query3(const char *schema_prefix) {
 	ECPGt_short,&(kol_ind),(long)1,(long)1,sizeof(short), 
 	ECPGt_float,&(quarter),(long)1,(long)1,sizeof(float), 
 	ECPGt_short,&(quarter_ind),(long)1,(long)1,sizeof(short), ECPGt_EORT);}
-#line 538 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 542 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode == 100) {
         printf("Данных не найдено.\n");
@@ -658,7 +662,7 @@ void query3(const char *schema_prefix) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
         printf("Закрытие курсора...\n");
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close parts_cursor1", ECPGt_EOIT, ECPGt_EORT);}
-#line 544 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 548 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
@@ -667,13 +671,13 @@ void query3(const char *schema_prefix) {
         }
         printf("Транзакция отменена\n\n");
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 551 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 555 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     } else {
         /* Есть данные - выводим заголовок и первую строку */
         printf("--------------------------------------------------------------------------\n");
-        printf("%-9s | %-10s | %-25s\n", "Поставщик", "Вес", "Четверть макс. веса");
+        printf("%-9s | %-11s | %-25s\n", "Поставщик", "Вес", "Четверть макс. веса");
         printf("--------------------------------------------------------------------------\n");
         if (n_post_ind < 0 || is_empty_string(n_post, sizeof(n_post)))
             strcpy(n_post_display, "Отсутствует");
@@ -704,17 +708,17 @@ void query3(const char *schema_prefix) {
 	ECPGt_short,&(kol_ind),(long)1,(long)1,sizeof(short), 
 	ECPGt_float,&(quarter),(long)1,(long)1,sizeof(float), 
 	ECPGt_short,&(quarter_ind),(long)1,(long)1,sizeof(short), ECPGt_EORT);}
-#line 580 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 584 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode == 100) {
             break;
         } else if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
             { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close parts_cursor1", ECPGt_EOIT, ECPGt_EORT);}
-#line 585 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 589 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 586 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 590 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -737,13 +741,13 @@ void query3(const char *schema_prefix) {
     /* Закрытие курсора */
     printf("Закрытие курсора...\n");
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close parts_cursor1", ECPGt_EOIT, ECPGt_EORT);}
-#line 607 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 611 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     /* Проверка, успешно ли закрылся курсор */
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 611 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 615 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -753,12 +757,12 @@ void query3(const char *schema_prefix) {
     /* Завершение транзакции */
     printf("Завершение транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "commit work");}
-#line 619 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 623 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 622 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 626 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -777,35 +781,35 @@ void query4(const char *schema_prefix) {
          
                  
     
-#line 635 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 639 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char n_izd [ 7 ] ;
  
-#line 636 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 640 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char name [ 21 ] ;
  
-#line 637 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 641 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char town [ 21 ] ;
  
-#line 638 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 642 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  short n_izd_ind = 0 , name_ind = 0 , town_ind = 0 ;
 /* exec sql end declare section */
-#line 639 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 643 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
 
     /* Вспомогательные буферы для безопасной обработки NULL */
-    char n_izd_display[25];
-    char name_display[25];
-    char town_display[25];
+    char n_izd_display[30];
+    char name_display[50];
+    char town_display[30];
 
     /* Начало транзакции */
     printf("Начало транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "begin work");}
-#line 648 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 652 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 651 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 655 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     }
@@ -813,19 +817,19 @@ void query4(const char *schema_prefix) {
         /* exec sql begin declare section */
              
         
-#line 656 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 660 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char schema_cmd [ 128 ] ;
 /* exec sql end declare section */
-#line 657 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 661 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_exec_immediate, schema_cmd, ECPGt_EOIT, ECPGt_EORT);}
-#line 659 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 663 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 662 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 666 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -837,14 +841,14 @@ void query4(const char *schema_prefix) {
     printf("Открытие курсора...\n");
     printf("Выполнение запроса...\n");
     printf("4.	Выбрать изделия, для которых не поставлялось ни одной из дета лей, поставляемых поставщиком S4.\n");
-    /* declare supplier_cursor cursor for select j . n_izd , j . name , j . town from j except select j1 . n_izd , j1 . name , j1 . town from spj t join j j1 on j1 . n_izd = t . n_izd where t . n_det in ( select n_det from spj a where a . n_post = 'S4' ) order by n_izd asc */
-#line 685 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+    /* declare supplier_cursor cursor for select j . n_izd , j . name , j . town from j where j . n_izd not in ( select distinct spj . n_izd from spj where spj . n_det in ( select distinct n_det from spj where n_post = 'S4' ) ) order by j . n_izd asc */
+#line 689 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     /* Проверка успешности определения курсора */
     if (sqlca.sqlcode < 0){
        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось определить курсор", false);
        { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 689 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 693 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
        printf("Транзакция отменена\n\n");
        return;
@@ -854,14 +858,14 @@ void query4(const char *schema_prefix) {
 
     /* Открытие курсора */
     printf("Открытие курсора...\n");
-    { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "declare supplier_cursor cursor for select j . n_izd , j . name , j . town from j except select j1 . n_izd , j1 . name , j1 . town from spj t join j j1 on j1 . n_izd = t . n_izd where t . n_det in ( select n_det from spj a where a . n_post = 'S4' ) order by n_izd asc", ECPGt_EOIT, ECPGt_EORT);}
-#line 698 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+    { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "declare supplier_cursor cursor for select j . n_izd , j . name , j . town from j where j . n_izd not in ( select distinct spj . n_izd from spj where spj . n_det in ( select distinct n_det from spj where n_post = 'S4' ) ) order by j . n_izd asc", ECPGt_EOIT, ECPGt_EORT);}
+#line 702 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     /* Проверка успешности открытия курсора */
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка открытия курсора", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 702 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 706 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -878,7 +882,7 @@ void query4(const char *schema_prefix) {
 	ECPGt_short,&(name_ind),(long)1,(long)1,sizeof(short), 
 	ECPGt_char,(town),(long)21,(long)1,(21)*sizeof(char), 
 	ECPGt_short,&(town_ind),(long)1,(long)1,sizeof(short), ECPGt_EORT);}
-#line 711 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 715 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode == 100) {
         printf("Данных не найдено.\n");
@@ -886,7 +890,7 @@ void query4(const char *schema_prefix) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
         printf("Закрытие курсора...\n");
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close supplier_cursor", ECPGt_EOIT, ECPGt_EORT);}
-#line 717 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 721 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
@@ -896,12 +900,12 @@ void query4(const char *schema_prefix) {
         }
         printf("Транзакция отменена\n\n");
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 725 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 729 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     } else {
         printf("--------------------------------------------------------------------------\n");
-        printf("%-7s | %-20s | %-20s\n", "n_izd", "Название", "Город");
+        printf("%-10s | %-30s | %-25s\n", "n_izd", "Название", "Город");
         printf("--------------------------------------------------------------------------\n");
         /* Безопасная обработка NULL-значений */
         if (n_izd_ind < 0 || is_empty_string(n_izd, sizeof(n_izd)))
@@ -911,6 +915,13 @@ void query4(const char *schema_prefix) {
             n_izd_display[sizeof(n_izd_display)-1] = '\0';
             trim_trailing_spaces(n_izd_display);
 
+        if (name_ind < 0 || is_empty_string(name, sizeof(name)))
+            strcpy(name_display, "Отсутствует");
+        else
+            strncpy(name_display, name, sizeof(name_display)-1);
+            name_display[sizeof(name_display)-1] = '\0';
+            trim_trailing_spaces(name_display);
+
 
         if (town_ind < 0 || is_empty_string(town, sizeof(town)))
             strcpy(town_display, "Отсутствует");
@@ -918,11 +929,15 @@ void query4(const char *schema_prefix) {
             strncpy(town_display, town, sizeof(town_display)-1);
             town_display[sizeof(town_display)-1] = '\0';
             trim_trailing_spaces(town_display);
-        printf("%-7s | %-20s | %-20s\n", n_izd_display,
-           name,
+        printf("%-10s | %-30s | %-25s\n", n_izd_display,
+               name_display,
            town_display);
     }
     while (1) {
+        memset(n_izd, 0, sizeof(n_izd));
+        memset(name, 0, sizeof(name));
+        memset(town, 0, sizeof(town));
+        n_izd_ind = name_ind = town_ind = 0;
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "fetch supplier_cursor", ECPGt_EOIT, 
 	ECPGt_char,(n_izd),(long)7,(long)1,(7)*sizeof(char), 
 	ECPGt_short,&(n_izd_ind),(long)1,(long)1,sizeof(short), 
@@ -930,17 +945,17 @@ void query4(const char *schema_prefix) {
 	ECPGt_short,&(name_ind),(long)1,(long)1,sizeof(short), 
 	ECPGt_char,(town),(long)21,(long)1,(21)*sizeof(char), 
 	ECPGt_short,&(town_ind),(long)1,(long)1,sizeof(short), ECPGt_EORT);}
-#line 751 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 766 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode == 100) {
             break;
         } else if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
             { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close supplier_cursor", ECPGt_EOIT, ECPGt_EORT);}
-#line 756 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 771 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 757 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 772 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -965,7 +980,7 @@ void query4(const char *schema_prefix) {
             strncpy(town_display, town, sizeof(town_display)-1);
             town_display[sizeof(town_display)-1] = '\0';
             trim_trailing_spaces(town_display);
-        printf("%-7s | %-20s | %-20s\n", n_izd_display,
+        printf("%-10s | %-30s | %-25s\n", n_izd_display,
            name_display,
            town_display);
     }
@@ -974,12 +989,12 @@ void query4(const char *schema_prefix) {
     /* Закрытие курсора */
     printf("Закрытие курсора...\n");
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close supplier_cursor", ECPGt_EOIT, ECPGt_EORT);}
-#line 789 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 804 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка закрытия курсора", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 792 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 807 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -990,12 +1005,12 @@ void query4(const char *schema_prefix) {
     /* Завершение транзакции */
     printf("Завершение транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "commit work");}
-#line 801 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 816 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 804 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 819 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -1023,25 +1038,25 @@ void query5(const char *schema_prefix) {
          
                        
     
-#line 824 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 839 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char n_det [ 7 ] ;
  
-#line 825 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 840 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char name [ 21 ] ;
  
-#line 826 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 841 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char cvet [ 21 ] ;
  
-#line 827 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 842 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  int ves ;
  
-#line 828 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 843 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char town [ 21 ] ;
  
-#line 829 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 844 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  short n_det_ind = 0 , name_ind = 0 , cvet_ind = 0 , ves_ind = 0 , town_ind = 0 ;
 /* exec sql end declare section */
-#line 830 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 845 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
 
     /* Вспомогательные буферы для безопасной обработки NULL */
@@ -1054,12 +1069,12 @@ void query5(const char *schema_prefix) {
     /* Начало транзакции */
     printf("Начало транзакции...\n");
     { ECPGtrans(__LINE__, NULL, "begin work");}
-#line 841 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 856 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка начала транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 844 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 859 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -1068,19 +1083,19 @@ void query5(const char *schema_prefix) {
         /* exec sql begin declare section */
              
         
-#line 850 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 865 "E:/C_Databases/Databases_on_C/test_sql.pgc"
  char schema_cmd [ 128 ] ;
 /* exec sql end declare section */
-#line 851 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 866 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         snprintf(schema_cmd, sizeof(schema_cmd), "SET search_path TO %s, public", schema_prefix);
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_exec_immediate, schema_cmd, ECPGt_EOIT, ECPGt_EORT);}
-#line 853 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 868 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка установки search_path", false);
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 856 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 871 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -1094,14 +1109,14 @@ void query5(const char *schema_prefix) {
     printf("5. Выдать полную информацию о деталях, которые поставлялись ТОЛЬКО поставщиками, имеющими максимальный рейтинг и число поставляемых деталей не менее 3. Вывести номер, название, цвет, вес и город детали.\n");
 
     /* declare parts_cursor2 cursor for select p . n_det , p . name , p . cvet , p . ves , p . town from p where p . n_det in ( select distinct spj . n_det from spj where spj . n_post in ( select n_post from s where reiting = ( select MAX ( reiting ) from s ) intersect select n_post from spj group by n_post having count ( distinct n_det ) >= 3 ) except select distinct spj . n_det from spj where spj . n_post not in ( select n_post from s where reiting = ( select MAX ( reiting ) from s ) ) ) order by p . n_det asc */
-#line 893 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 908 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
 
     /* Проверка успешности определения курсора */
     if (sqlca.sqlcode < 0){
        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось определить курсор", false);
        { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 898 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 913 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
        printf("Транзакция отменена\n\n");
        return;
@@ -1112,12 +1127,12 @@ void query5(const char *schema_prefix) {
     /* Открытие курсора */
     printf("Открытие курсора...\n");
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "declare parts_cursor2 cursor for select p . n_det , p . name , p . cvet , p . ves , p . town from p where p . n_det in ( select distinct spj . n_det from spj where spj . n_post in ( select n_post from s where reiting = ( select MAX ( reiting ) from s ) intersect select n_post from spj group by n_post having count ( distinct n_det ) >= 3 ) except select distinct spj . n_det from spj where spj . n_post not in ( select n_post from s where reiting = ( select MAX ( reiting ) from s ) ) ) order by p . n_det asc", ECPGt_EOIT, ECPGt_EORT);}
-#line 907 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 922 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка открытия курсора", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 910 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 925 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -1140,7 +1155,7 @@ void query5(const char *schema_prefix) {
 	ECPGt_short,&(ves_ind),(long)1,(long)1,sizeof(short), 
 	ECPGt_char,(town),(long)21,(long)1,(21)*sizeof(char), 
 	ECPGt_short,&(town_ind),(long)1,(long)1,sizeof(short), ECPGt_EORT);}
-#line 921 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 936 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode == 100) {
         printf("Данных не найдено.\n");
@@ -1148,7 +1163,7 @@ void query5(const char *schema_prefix) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
         printf("Закрытие курсора...\n");
         { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close parts_cursor2", ECPGt_EOIT, ECPGt_EORT);}
-#line 927 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 942 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось закрыть курсор", false);
@@ -1158,12 +1173,12 @@ void query5(const char *schema_prefix) {
         }
         printf("Транзакция отменена\n\n");
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 935 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 950 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         return;
     } else {
         printf("------------------------------------------------------------\n");
-        printf("%-7s | %-20s | %-20s | %-5s | %-20s\n", "n_det", "Название", "Цвет", "Вес", "Город");
+        printf("%-7s | %-25s | %-12s | %-8s | %-10s\n", "n_det", "Название", "Цвет", "Вес", "Город");
         printf("------------------------------------------------------------\n");
 
         /* Безопасная обработка NULL-значений */
@@ -1224,17 +1239,17 @@ void query5(const char *schema_prefix) {
 	ECPGt_short,&(ves_ind),(long)1,(long)1,sizeof(short), 
 	ECPGt_char,(town),(long)21,(long)1,(21)*sizeof(char), 
 	ECPGt_short,&(town_ind),(long)1,(long)1,sizeof(short), ECPGt_EORT);}
-#line 989 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 1004 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         if (sqlca.sqlcode == 100) {
             break;
         } else if (sqlca.sqlcode < 0) {
             ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка при получении данных", false);
             { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close parts_cursor2", ECPGt_EOIT, ECPGt_EORT);}
-#line 994 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 1009 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 995 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 1010 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
             return;
         }
@@ -1286,12 +1301,12 @@ void query5(const char *schema_prefix) {
     /* Закрытие курсора */
     printf("Закрытие курсора...\n");
     { ECPGdo(__LINE__, 0, 1, NULL, 0, ECPGst_normal, "close parts_cursor2", ECPGt_EOIT, ECPGt_EORT);}
-#line 1045 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 1060 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка закрытия курсора", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 1048 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 1063 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;
@@ -1299,12 +1314,12 @@ void query5(const char *schema_prefix) {
 
     /* Завершение транзакции */
     { ECPGtrans(__LINE__, NULL, "commit work");}
-#line 1054 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 1069 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
     if (sqlca.sqlcode < 0) {
         ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Ошибка завершения транзакции", false);
         { ECPGtrans(__LINE__, NULL, "rollback work");}
-#line 1057 "E:/C_Databases/Databases_on_C/test_sql.pgc"
+#line 1072 "E:/C_Databases/Databases_on_C/test_sql.pgc"
 
         printf("Транзакция отменена\n\n");
         return;

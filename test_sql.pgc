@@ -199,17 +199,21 @@ int main(void) {
     printf("\nВведите название схемы: ");
     scanf("%63s", db_schema_name_cmd);
 
+    /* Пример при использовании локальной БД*/
     // strcpy(db_name, "students_win1251");
     // strcpy(db_user, "vladimir1");
     // strcpy(db_password, "FAST1987!");
     // strcpy(db_host, "127.0.0.1");
     // strcpy(db_port, "5432");
+    // strcpy(db_schema_name, "-");
 
+    /* Пример при использовании серверной БД*/
     // strcpy(db_name, "students");
     // strcpy(db_user, "pmi-b2702");
     // strcpy(db_password, "4ioi#ZHzE");
     // strcpy(db_host, "students.ami.nstu.ru");
     // strcpy(db_port, "5432");
+    // strcpy(db_schema_name, "pmib2702");
 
     strcpy(db_name, db_name_cmd);
     strcpy(db_user, db_user_cmd);
@@ -553,7 +557,7 @@ void query3(const char *schema_prefix) {
     } else {
         /* Есть данные - выводим заголовок и первую строку */
         printf("--------------------------------------------------------------------------\n");
-        printf("%-9s | %-10s | %-25s\n", "Поставщик", "Вес", "Четверть макс. веса");
+        printf("%-9s | %-11s | %-25s\n", "Поставщик", "Вес", "Четверть макс. веса");
         printf("--------------------------------------------------------------------------\n");
         if (n_post_ind < 0 || is_empty_string(n_post, sizeof(n_post)))
             strcpy(n_post_display, "Отсутствует");
@@ -639,9 +643,9 @@ void query4(const char *schema_prefix) {
     EXEC SQL END DECLARE SECTION;
 
     /* Вспомогательные буферы для безопасной обработки NULL */
-    char n_izd_display[25];
-    char name_display[25];
-    char town_display[25];
+    char n_izd_display[30];
+    char name_display[50];
+    char town_display[30];
 
     /* Начало транзакции */
     printf("Начало транзакции...\n");
@@ -673,16 +677,16 @@ void query4(const char *schema_prefix) {
     EXEC SQL DECLARE supplier_cursor CURSOR FOR
     SELECT j.n_izd, j.name, j.town
     FROM j
-    EXCEPT
-    SELECT j1.n_izd, j1.name, j1.town
-    FROM spj t
-    JOIN j j1 ON j1.n_izd = t.n_izd
-    WHERE t.n_det in (
-        SELECT n_det
-        FROM spj a
-        WHERE a.n_post = 'S4'
+    WHERE j.n_izd NOT IN (
+            SELECT DISTINCT spj.n_izd
+            FROM spj
+            WHERE spj.n_det IN (
+                    SELECT DISTINCT n_det
+                    FROM spj
+                    WHERE n_post = 'S4'
+                    )
     )
-    ORDER BY n_izd ASC;
+    ORDER BY j.n_izd ASC;
     /* Проверка успешности определения курсора */
     if (sqlca.sqlcode < 0){
        ErrorHandler(sqlca.sqlerrm.sqlerrmc, "Не удалось определить курсор", false);
@@ -726,7 +730,7 @@ void query4(const char *schema_prefix) {
         return;
     } else {
         printf("--------------------------------------------------------------------------\n");
-        printf("%-7s | %-20s | %-20s\n", "n_izd", "Название", "Город");
+        printf("%-10s | %-30s | %-25s\n", "n_izd", "Название", "Город");
         printf("--------------------------------------------------------------------------\n");
         /* Безопасная обработка NULL-значений */
         if (n_izd_ind < 0 || is_empty_string(n_izd, sizeof(n_izd)))
@@ -736,6 +740,13 @@ void query4(const char *schema_prefix) {
             n_izd_display[sizeof(n_izd_display)-1] = '\0';
             trim_trailing_spaces(n_izd_display);
 
+        if (name_ind < 0 || is_empty_string(name, sizeof(name)))
+            strcpy(name_display, "Отсутствует");
+        else
+            strncpy(name_display, name, sizeof(name_display)-1);
+            name_display[sizeof(name_display)-1] = '\0';
+            trim_trailing_spaces(name_display);
+
 
         if (town_ind < 0 || is_empty_string(town, sizeof(town)))
             strcpy(town_display, "Отсутствует");
@@ -743,11 +754,15 @@ void query4(const char *schema_prefix) {
             strncpy(town_display, town, sizeof(town_display)-1);
             town_display[sizeof(town_display)-1] = '\0';
             trim_trailing_spaces(town_display);
-        printf("%-7s | %-20s | %-20s\n", n_izd_display,
-           name,
+        printf("%-10s | %-30s | %-25s\n", n_izd_display,
+               name_display,
            town_display);
     }
     while (1) {
+        memset(n_izd, 0, sizeof(n_izd));
+        memset(name, 0, sizeof(name));
+        memset(town, 0, sizeof(town));
+        n_izd_ind = name_ind = town_ind = 0;
         EXEC SQL FETCH supplier_cursor INTO :n_izd:n_izd_ind, :name:name_ind, :town:town_ind;
         if (sqlca.sqlcode == 100) {
             break;
@@ -778,7 +793,7 @@ void query4(const char *schema_prefix) {
             strncpy(town_display, town, sizeof(town_display)-1);
             town_display[sizeof(town_display)-1] = '\0';
             trim_trailing_spaces(town_display);
-        printf("%-7s | %-20s | %-20s\n", n_izd_display,
+        printf("%-10s | %-30s | %-25s\n", n_izd_display,
            name_display,
            town_display);
     }
@@ -936,7 +951,7 @@ void query5(const char *schema_prefix) {
         return;
     } else {
         printf("------------------------------------------------------------\n");
-        printf("%-7s | %-20s | %-20s | %-5s | %-20s\n", "n_det", "Название", "Цвет", "Вес", "Город");
+        printf("%-7s | %-25s | %-12s | %-8s | %-10s\n", "n_det", "Название", "Цвет", "Вес", "Город");
         printf("------------------------------------------------------------\n");
 
         /* Безопасная обработка NULL-значений */
